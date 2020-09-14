@@ -1,9 +1,8 @@
 import { app, BrowserWindow, nativeTheme, ipcMain } from 'electron'
-const fs = require('fs')
-const path = require('path')
-const fetch = require('node-fetch')
-const cheerio = require('cheerio')
-const request = require('request')
+import fs from 'fs'
+import path from 'path'
+import cheerio from 'cheerio'
+import fetch from 'electron-fetch'
 
 try {
   if (process.platform === 'win32' && nativeTheme.shouldUseDarkColors === true) {
@@ -64,7 +63,7 @@ app.on('activate', () => {
 
 ipcMain.on('downloadFile', async (event, arg) => {
   const { sender } = event
-  const response = await fetch(arg, { mode: 'no-cors' })
+  const response = await fetch(arg)
   const pageContent = await response.text()
   const $ = cheerio.load(pageContent)
   const video = $('video')
@@ -78,9 +77,8 @@ ipcMain.on('downloadFile', async (event, arg) => {
   let totalBytes = 0
   let percentage = 0
 
-  const req = request({
-    method: 'GET', uri: videoSrc
-  })
+  const videoRes = await fetch(videoSrc)
+  totalBytes = parseInt(videoRes.headers.get('content-length'))
 
   const fileFolder = `./${dateFormat('mmdd', new Date())}`
   const filePath = `${fileFolder}/${fileName}`
@@ -91,15 +89,16 @@ ipcMain.on('downloadFile', async (event, arg) => {
     fs.unlinkSync(filePath)
   }
   const out = fs.createWriteStream(filePath)
-  req.pipe(out)
-
-  req.on('response', function (data) {
-    // Change the total bytes value to get progress later.
-    totalBytes = parseInt(data.headers['content-length'])
+  out.on('error', error => {
+    console.log(error)
+    sender.send('downloadFail', error)
   })
-
-  req.on('data', function (chunk) {
-    // Update the received bytes
+  out.on('finish', () => {
+    console.log('finished')
+    sender.send('downloadComplete', path.resolve(filePath))
+  })
+  videoRes.body.on('data', chunk => {
+    console.log(chunk.length)
     receivedBytes += chunk.length
     const newPercentage = Math.round((receivedBytes * 100) / totalBytes)
     if (percentage !== newPercentage) {
@@ -107,14 +106,7 @@ ipcMain.on('downloadFile', async (event, arg) => {
       sender.send('downloading', { percentage })
     }
   })
-
-  req.on('end', function () {
-    sender.send('downloadComplete', path.resolve(filePath))
-  })
-
-  req.on('error', function (error) {
-    sender.send('downloadFail', error)
-  })
+  videoRes.body.pipe(out)
 })
 
 function dateFormat (fmt, date) {
@@ -132,7 +124,7 @@ function dateFormat (fmt, date) {
     ret = new RegExp('(' + k + ')').exec(fmt)
     if (ret) {
       fmt = fmt.replace(ret[1], (ret[1].length === 1) ? (opt[k]) : (opt[k].padStart(ret[1].length, '0')))
-    };
-  };
+    }
+  }
   return fmt
 }
