@@ -77,7 +77,6 @@ export default {
   async mounted () {
     ipcRenderer.on('downloading', (event, { percentage }) => {
       this.loading = true
-      console.log(percentage)
       this.percentage = percentage
     })
     ipcRenderer.on('downloadComplete', (event, filePath) => {
@@ -87,7 +86,7 @@ export default {
     ipcRenderer.on('downloadFail', (event, error) => {
       this.loading = false
       console.log(error)
-      this.showAlert({ message: '下载失败' })
+      this.showAlert({ message: `下载失败:${JSON.stringify(error)}` })
     })
   }
 }
