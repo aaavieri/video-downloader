@@ -66,11 +66,20 @@ ipcMain.on('downloadFile', async (event, arg) => {
   const response = await fetch(arg)
   const pageContent = await response.text()
   const $ = cheerio.load(pageContent)
-  const video = $('video')
-  if (!video) {
+  const pageDataJs = $('#_page_data').html()
+  let videoSrc
+  if (pageDataJs) {
+    const [pageDataLine] = pageDataJs.split(';')
+    const pageData = doEval(`var window = {};\n ${pageDataLine};\n return window.__PRELOADED_STATE__;`)
+    if (!pageData) {
+      return
+    }
+    videoSrc = pageData.curVideoMeta.playurl
+  }
+  if (!videoSrc) {
     return
   }
-  const videoSrc = video.attr('src')
+  console.log(videoSrc)
   const [, fileName] = videoSrc.match(/\/([-\w]+\.mp4)\?/)
   // Save variable to know progress
   let receivedBytes = 0
@@ -108,6 +117,11 @@ ipcMain.on('downloadFile', async (event, arg) => {
   })
   videoRes.body.pipe(out)
 })
+
+function doEval (script) {
+  const Fn = Function
+  return new Fn(script)()
+}
 
 function dateFormat (fmt, date) {
   let ret
